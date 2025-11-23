@@ -1,0 +1,83 @@
+// =============================================================================
+// STIX Pattern Grammar (STIX 2.1 Specification Section 9)
+// =============================================================================
+
+WHITESPACE = _{ " " | "\\t" | "\\r" | "\\n" }
+QUOTE      = _{ "'" }
+
+// Comparison operators:
+equal      = { "=" }
+not_equal  = { "!=" }
+gt         = { ">" }
+lt         = { "<" }
+ge         = { ">=" }
+le         = { "<=" }
+in         = { "IN" }
+like       = { "LIKE" }
+match      = { "MATCHES" }
+issubset   = { "ISSUBSET" }
+issuperset = { "ISSUPERSET" }
+exists     = { "EXISTS" }
+
+// Boolean and observation operators:
+and        = { "AND" }
+or         = { "OR" }
+not        = { "NOT" }
+followedby = { "FOLLOWEDBY" }
+
+// 9.2 Constants:
+bool            = ${ "true" | "false" }
+hex             = ${ ASCII_HEX_DIGIT+ }
+hex_constant    = _{ "h" ~ QUOTE ~ hex ~ QUOTE }
+bin             = ${ (ASCII_ALPHANUMERIC | "/" | "+" | "=")+ }
+bin_constant    = _{ "b" ~ QUOTE ~ bin ~ QUOTE }
+int             = ${ ("-")? ~ ASCII_DIGIT+ }
+pos_int         = ${ ASCII_DIGIT+ }
+float           = ${ ("-")? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+pos_float       = ${ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+string_escape   = @{ "\\" ~ ANY }
+string          =  { (string_escape | !"'" ~ ANY)* }
+string_constant = _{ QUOTE ~ string ~ QUOTE }
+time            = ${ (ASCII_ALPHANUMERIC | ":" | "-")+ }
+time_constant   = _{ "t" ~ QUOTE ~ time ~ QUOTE }
+
+// Value types (ordered for correctness: float before int, common types first)
+value = { string_constant | bool | time_constant | bin_constant | hex_constant | float | int }
+list  = { "(" ~ value ~ ("," ~ value)* ~ ")" }
+
+// 9.5.1 Observation Expression Qualifiers:
+repeat    = { "REPEATS" ~ pos_int ~ "TIMES" }
+within    = { "WITHIN" ~ (pos_float | pos_int) ~ "SECONDS" }
+interval  = { "START" ~ time_constant ~ "STOP" ~ time_constant }
+qualifier = { within | repeat | interval }
+
+// 9.5.2 Observation Operators:
+obs_op = _{ and | or | followedby }
+// 9.6 Comparison Expressions:
+bool_op = _{ and | or }
+// 9.6.1 Comparison Operators:
+comp_op = _{ equal | not_equal | in | like | match | ge | gt | le | lt | issubset | issuperset }
+
+// 9.7 Object Path Syntax:
+object   = ${ (ASCII_ALPHANUMERIC | "-")+ }
+property = ${ (ASCII_ALPHANUMERIC | "_")+ | (QUOTE ~ (ASCII_ALPHANUMERIC | "-" | ".")+ ~ QUOTE) }
+index    = ${ ("*" | ASCII_DIGIT+) }
+step     =  { property ~ ("[" ~ index ~ "]")? }
+path     = ${ object ~ ":" ~ step ~ ("." ~ step)* }
+
+// 9.6 Comparison Expressions:
+comparison_exists = _{ exists ~ path }
+comparison_normal = _{ path ~ not? ~ comp_op ~ (value | list) }
+comparison        =  { comparison_normal | comparison_exists | "(" ~ comparison_expression ~ ")" }
+comparison_expression = _{ comparison ~ (bool_op ~ comparison)* }
+
+// 9.5 Observation Expressions:
+observation       =  { "[" ~ comparison_expression ~ "]" ~ qualifier* }
+observation_group =  { "(" ~ expression ~ ")" ~ qualifier* }
+
+// 9.4 Pattern Expressions:
+inner_expression  = _{ observation_group | observation }
+expression        =  { inner_expression ~ (obs_op ~ inner_expression)* }
+
+// Entry point: a complete STIX pattern
+pattern = { SOI ~ expression ~ EOI }
